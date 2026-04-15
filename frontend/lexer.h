@@ -31,6 +31,7 @@ enum class TokenKind : uint8_t {
     TDQUOTE,
     TSQUOTE,
     TCOLONEQUAL,
+    TSTRING,
     TCOUNT,
 };
 
@@ -100,8 +101,28 @@ Token token_next(Lexer &l)
     if (c == '[')  { std::size_t p = l.pos; l.advance(); return { .kind = TokenKind::TLSBRACE,    .pos = p }; }
     if (c == ']')  { std::size_t p = l.pos; l.advance(); return { .kind = TokenKind::TRSBRACE,    .pos = p }; }
     if (c == ';')  { std::size_t p = l.pos; l.advance(); return { .kind = TokenKind::TSEMICOLON,  .pos = p }; }
-    if (c == '"')  { std::size_t p = l.pos; l.advance(); return { .kind = TokenKind::TDQUOTE,     .pos = p }; }
     if (c == '\'') { std::size_t p = l.pos; l.advance(); return { .kind = TokenKind::TSQUOTE,     .pos = p }; }
+    if (c == '"') {
+        std::size_t start = l.pos;
+        l.advance();
+
+        // TODO: Add escape sequence handling here if needed
+        while (l.pos < l.src.size() && l.peek() != '"') {
+            l.advance();
+        }
+
+        // NOTE: Unterminated string
+        if (l.pos >= l.src.size()) {
+            std::cerr << std::format("Unterminated string literal starting at position {}\n", start);
+            return Token{ .kind = TokenKind::TUNKNOWN, .pos = start };
+        }
+
+        l.advance();
+
+        std::string value = l.src.substr(start + 1, l.pos - start - 2);
+        return Token{ .kind = TokenKind::TSTRING, .name = value, .pos = start };
+    }
+
     if (c == ':') {
         std::size_t p = l.pos;
         l.advance();
@@ -131,7 +152,7 @@ constexpr std::string token_kind_name(TokenKind kind)
         "DOT",     "NOT",     "AMPRESAND","BAR",      "GREATER",
         "LESSER",  "EOF",     "UNKNOWN","COLON",     "RBRACE",
         "LBRACE",  "RSBRACE", "LSBRACE","SEMICOLON", "DQUOTE",
-        "SQUOTE",  "COLONEQUAL",
+        "SQUOTE",  "COLONEQUAL", "STRING"
     };
     static_assert(std::size(names) == static_cast<std::size_t>(TokenKind::TCOUNT),
         "token_kind_name is missing an entry — add it");
@@ -151,12 +172,23 @@ void Parser::advance()   { cur = token_next(lex); }
 
 void Parser::error_at(Token token, const std::string &msg)
 {
-    std::cerr << msg << "\n";
-    std::size_t line_start = lex.src.rfind('\n', token.pos);
-    line_start = (line_start == std::string::npos) ? 0 : line_start + 1;
+    std::size_t line_start = 0;
+    int line_num = 1;
+
+    for (std::size_t i = 0; i < token.pos && i < lex.src.size(); i++) {
+        if (lex.src[i] == '\n') {
+            line_start = i + 1;
+            line_num++;
+        }
+    }
+
     std::size_t line_end = lex.src.find('\n', token.pos);
     if (line_end == std::string::npos) line_end = lex.src.size();
-    std::cerr << std::format("    {}\n", lex.src.substr(line_start, line_end - line_start));
+
+    std::string line = lex.src.substr(line_start, line_end - line_start);
+
+    std::cerr << std::format("Error at line {}: {}\n", line_num, msg);
+    std::cerr << std::format("    {}\n", line);
     std::cerr << std::format("    {}^\n", std::string(token.pos - line_start, ' '));
 }
 
@@ -183,19 +215,17 @@ std::unique_ptr<Node> parse_value(Parser &p)
         p.advance();
         return std::make_unique<Node>(NodeKind::BOOLEAN, BooleanLiteral{ value });
     }
-    if (p.cur.kind == TokenKind::TDQUOTE) {
-        std::size_t start = p.lex.pos;
-        while (p.lex.pos < p.lex.src.size() && p.lex.peek() != '"') p.lex.advance();
-        std::string value = p.lex.src.substr(start, p.lex.pos - start);
-        p.lex.advance();
-        p.advance();
-        return std::make_unique<Node>(NodeKind::STRING, StringLiteral{ value });
-    }
     if (p.cur.kind == TokenKind::TIDENT) {
         std::string name = p.cur.name;
         p.advance();
         return std::make_unique<Node>(NodeKind::IDENT, Identifier{ name });
     }
+    if (p.cur.kind == TokenKind::TSTRING) {
+        std::string value = p.cur.name;
+        p.advance();
+        return std::make_unique<Node>(NodeKind::STRING, StringLiteral{ value });
+    }
+
     p.error_at(p.cur, std::format("Unexpected value token '{}'", token_kind_name(p.cur.kind)));
     p.advance();
     return nullptr;
@@ -203,6 +233,8 @@ std::unique_ptr<Node> parse_value(Parser &p)
 
 std::unique_ptr<Node> parse_statement(Parser &p)
 {
+    Token start_token = p.cur;
+
     if (!p.expect(TokenKind::TIDENT)) { p.advance(); return nullptr; }
 
     std::string var_name = p.cur.name;
@@ -216,9 +248,20 @@ std::unique_ptr<Node> parse_statement(Parser &p)
             auto arg = parse_value(p);
             if (arg) args.push_back(std::move(arg));
         }
+
+        Token rparen_token = p.cur;
+
         if (!p.expect(TokenKind::TRPARENT)) return nullptr;
         p.advance();
-        if (!p.expect(TokenKind::TSEMICOLON)) return nullptr;
+
+        if (p.cur.kind != TokenKind::TSEMICOLON) {
+            Token expected_semicolon;
+            expected_semicolon.pos = rparen_token.pos + 1;
+            expected_semicolon.kind = TokenKind::TSEMICOLON;
+
+            p.error_at(expected_semicolon, std::format("Missing ';' after function call to '{}'", var_name));
+            return nullptr;
+        }
         p.advance();
         return std::make_unique<Node>(NodeKind::FUNCTIONCALL,
                    FunctionCallNode{ var_name, std::move(args) });
@@ -227,8 +270,25 @@ std::unique_ptr<Node> parse_statement(Parser &p)
     if (!p.expect(TokenKind::TCOLONEQUAL)) { p.advance(); return nullptr; }
     p.advance();
 
+    Token value_start = p.cur;
     auto value = parse_value(p);
-    if (!p.expect(TokenKind::TSEMICOLON)) return nullptr;
+
+    if (!value) return nullptr;
+
+    if (p.cur.kind != TokenKind::TSEMICOLON) {
+        Token expected_semicolon;
+        if (value_start.kind == TokenKind::TNUMBER ||
+            value_start.kind == TokenKind::TSTRING ||
+            value_start.kind == TokenKind::TIDENT) {
+            expected_semicolon.pos = value_start.pos + value_start.name.length();
+        } else {
+            expected_semicolon.pos = p.cur.pos;
+        }
+        expected_semicolon.kind = TokenKind::TSEMICOLON;
+
+        p.error_at(expected_semicolon, std::format("Missing ';' after assignment to '{}'", var_name));
+        return nullptr;
+    }
     p.advance();
 
     return std::make_unique<Node>(NodeKind::ASSIGN,
@@ -265,8 +325,29 @@ std::unique_ptr<Node> parse_function(Parser &p)
     p.advance();
 
     if (!p.expect(TokenKind::TLPARENT)) return nullptr;
+
+    Token lparen_token = p.cur;
     p.advance();
-    if (!p.expect(TokenKind::TRPARENT)) return nullptr;
+
+    if (p.cur.kind != TokenKind::TRPARENT) {
+        Token expected_rparen;
+        expected_rparen.pos = lparen_token.pos + 1;
+        expected_rparen.kind = TokenKind::TRPARENT;
+
+        p.error_at(expected_rparen, std::format("Expected ')' after function '{}' parameters", name));
+
+        while (p.cur.kind != TokenKind::TLBRACE && p.cur.kind != TokenKind::TEOF) {
+            p.advance();
+        }
+
+        if (p.cur.kind == TokenKind::TLBRACE) {
+            auto body = parse_block(p);
+            if (!body) return nullptr;
+            return std::make_unique<Node>(NodeKind::FUNCTIONDECL,
+                       FunctionDeclNode{ name, std::move(body) });
+        }
+        return nullptr;
+    }
     p.advance();
 
     auto body = parse_block(p);

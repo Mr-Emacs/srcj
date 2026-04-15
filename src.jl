@@ -7,7 +7,7 @@ fn foo()
 fn main()
 {
     foo();
-    a := 10
+    a := 10;
     b := "Hello";
     c := true;
     print(20);
