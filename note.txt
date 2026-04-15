@@ -1,0 +1,50 @@
+ TODO: Add comptime to the spec
+ struct Foo {
+     a: number,
+     c: bool,
+     d: string,
+     fn test(str: string) -> number {
+       i := 0;
+         while i < str.len() {
+             i++;
+         }
+     }
+ }
+ open can be applied to keyword struct which make the struct inheritable a member function must use open in order to make that function overridable.
+ extern CFFI in the compiler it self it should accept the dll itself to be loaded with it so.
+ extern "raylib", path="/path/to/libraylib.so";
+ interface bar {
+     fn bazz(foo: number) -> number;
+ }
+ fn main() {
+     a := 10;
+     c := true;
+     b := "Hello";
+ }
+ import to import modules. #import "module_name";
+ Intrinsic: #load "module_name";
+module Raylib {
+     fn init_window();
+ }
+
+Module System
+#import "Raylib" as raylib;
+raylib::init_window();
+#import "Raylib" *;
+init_window();
+
+# Rotation mechanism
+|<< rotate left
+|>> rotate right
+
+# If Else
+
+if i > str.len() && i  > 0 {
+   // do sth
+} else if i == 0 {
+   // do sth
+} else {
+   // do sth
+}
+
+# Break and Continue
