@@ -1,40 +1,44 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <vector>
 #define LEXER_IMPLEMENTATION
-#include "lexer.h"
+#include "frontend/lexer.h"
+#include "frontend/printer.h"
 
 std::string read_file(const std::string &path)
 {
     std::fstream fs(path);
     if (!fs.is_open()) return "";
-
-    std::stringstream content_buf;
-    content_buf << fs.rdbuf();
-
-    fs.close();
-    return content_buf.str();
+    std::stringstream buf;
+    buf << fs.rdbuf();
+    return buf.str();
 }
 
 int main()
 {
-    Lexer l {
-        .src = read_file("src.j"),
-        .pos = 0,
-    };
-
+    Lexer l{ .src = read_file("src.jl"), .pos = 0 };
     Parser p;
     p.lex = l;
     p.advance();
 
+    std::vector<std::unique_ptr<Node>> tree;
     while (p.cur.kind != TokenKind::TEOF) {
         if (p.cur.kind == TokenKind::TIDENT && p.cur.name == "fn") {
-            parse_function(p);
+            auto node = parse_function(p);
+            if (node) tree.push_back(std::move(node));
         } else {
             p.error_at(p.cur, std::format("Unexpected top-level token '{}'",
                        token_kind_name(p.cur.kind)));
             p.advance();
         }
+    }
+
+    Resolver resolver;
+    std::cout << "\n----Resolved AST PRINT ----\n";
+    for (auto &node : tree) {
+        node = resolve_node(resolver, std::move(node));
+        if (node) print_node(*node);
     }
 
     return 0;
