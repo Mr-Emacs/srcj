@@ -1,11 +1,14 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+
 #include <vector>
 #define LEXER_IMPLEMENTATION
 #include "lexer.h"
 #include "printer.h"
 #include "resolve.h"
+#include "diagnostic.h"
+#include "semantic.h"
 
 std::string read_file(const std::string& path)
 {
@@ -45,6 +48,18 @@ int main()
         node = resolve_node(resolver, std::move(node));
         if (node) print_node(*node);
     }
+
+    lang::DiagnosticEngine diag;
+    lang::Sema             sema{resolver, diag, {}};
+
+    std::cout << "\n---- Semanitc Pass ----\n";
+    for (auto& node : tree)
+    {
+        if (node) sema.check(*node);
+    }
+
+    diag.flush(l.src);
+    if (diag.has_errors) return 1;
 
     return 0;
 }

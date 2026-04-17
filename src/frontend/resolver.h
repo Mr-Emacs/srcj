@@ -3,6 +3,7 @@
 #include <string>
 #include <memory>
 #include <unordered_map>
+#include "../middle/types.h"
 
 namespace lang
 {
@@ -18,6 +19,7 @@ namespace lang
     {
         std::string name;
         SymbolKind  kind;
+        Type        type = Type::unknown();
         Intrinsic   intrinsic;
     };
 
@@ -75,9 +77,14 @@ namespace lang
       private:
         void register_intrinsics()
         {
-            current->define({"print", SymbolKind::Intrinsic, {"print", IntrinsicKind::PRINT}});
-            current->define({"add", SymbolKind::Intrinsic, {"add", IntrinsicKind::ADD}});
-            current->define({"sub", SymbolKind::Intrinsic, {"sub", IntrinsicKind::SUB}});
+            current->define({.name = "print", .kind = SymbolKind::Intrinsic, .type = Type::void_(), .intrinsic = {"print", IntrinsicKind::PRINT}});
+            current->define({.name = "add", .kind = SymbolKind::Intrinsic, .type = Type::number_(), .intrinsic = {"add", IntrinsicKind::ADD}});
+            current->define({
+                .name      = "sub",
+                .kind      = SymbolKind::Intrinsic,
+                .type      = Type::number_(),
+                .intrinsic = {"sub", IntrinsicKind::SUB},
+            });
 
             static_assert(static_cast<uint8_t>(IntrinsicKind::COUNT) == 3,
                           "register_intrinsics is missing an entry for a new IntrinsicKind");

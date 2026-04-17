@@ -1,14 +1,10 @@
 fn foo()
 {
-    b := 20;
-    print(b);
+    a := 20;
+    print(a);
 }
 
 fn main()
 {
-    foo();
-    a := 10;
-    b := "Hello";
-    c := true;
-    print(20);
+	foo();
 }

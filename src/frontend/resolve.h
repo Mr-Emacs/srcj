@@ -33,7 +33,7 @@ namespace lang
         else if (node->kind == NodeKind::FUNCTIONDECL)
         {
             auto& decl = std::get<FunctionDeclNode>(node->data);
-            r.define({decl.name, SymbolKind::Function});
+            r.define({decl.name, SymbolKind::Function, {}, {}});
             decl.body = resolve_node(r, std::move(decl.body));
         }
 
@@ -41,7 +41,7 @@ namespace lang
         {
             auto& assign = std::get<AssignNode>(node->data);
             assign.value = resolve_node(r, std::move(assign.value));
-            r.define({assign.name, SymbolKind::Variable});
+            r.define({assign.name, SymbolKind::Variable, {}, {}});
         }
 
         return node;
