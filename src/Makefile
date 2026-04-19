@@ -26,7 +26,7 @@ ifeq ($(CXX),)
     CXX = clang++
 endif
 
-CXXFLAGS ?= -std=c++20 -I./frontend
+CXXFLAGS ?= -std=c++20 -I./frontend -I./middle
 
 all: format build
 
