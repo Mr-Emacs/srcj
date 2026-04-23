@@ -146,7 +146,6 @@ namespace lang
                         return nullptr;
                     }
 
-
                     if constexpr (std::is_same_v<T, BlockNode>)
                     {
                         llvm::Value* last = nullptr;
@@ -154,10 +153,6 @@ namespace lang
                             if (stmt) last = emit(*stmt);
                         return last;
                     }
-
-
-
-
 
                     if constexpr (std::is_same_v<T, FunctionDeclNode>)
                     {

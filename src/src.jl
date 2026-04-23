@@ -1,4 +1,6 @@
 fn main() {
-    x := 69 * 420 + 9000;
-    print(x);
+    x := false; 
+    if x {
+        print(x);
+    }
 }
