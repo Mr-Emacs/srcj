@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cctype>
+#include <iostream>
 #include <string_view>
 #include <format>
 #include "common.h"
@@ -81,6 +82,8 @@ namespace lang::lex
     std::unique_ptr<Node> parse_load_module(Parser& p);
     std::unique_ptr<Node> parse_extern_lib(Parser& p);
     std::unique_ptr<Node> parse_structure(Parser& p);
+    std::unique_ptr<Node> parse_primary(Parser& p);
+    std::unique_ptr<Node> parse_term(Parser& p);
 #if defined(LEXER_IMPLEMENTATION)
 
     char Lexer::peek()
@@ -143,7 +146,7 @@ namespace lang::lex
             l.advance();
             return {.kind = TokenKind::TEQUAL, .pos = p};
         }
-        // NOTE:*_for_Multiplication_20260420_020309
+
         if (c == '*')
         {
             std::size_t p = l.pos;
@@ -245,13 +248,11 @@ namespace lang::lex
             std::size_t start = l.pos;
             l.advance();
 
-            // TODO: Add escape sequence handling here if needed
             while (l.pos < l.src.size() && l.peek() != '"')
             {
                 l.advance();
             }
 
-            // NOTE: Unterminated string
             if (l.pos >= l.src.size())
             {
                 std::cerr << std::format("Unterminated string literal starting at position {}\n", start);
@@ -352,62 +353,18 @@ namespace lang::lex
 
     std::unique_ptr<Node> parse_value(Parser& p)
     {
-        std::unique_ptr<Node> lhs;
-        if (p.cur.kind == TokenKind::TNUMBER)
+        auto lhs = parse_term(p);
+        while (p.cur.kind == TokenKind::TPLUS ||
+               p.cur.kind == TokenKind::TMINUS)
         {
-            std::size_t value = std::stoull(p.cur.name);
+            OpKind op = (p.cur.kind == TokenKind::TPLUS)
+                            ? OpKind::ADD
+                            : OpKind::SUB;
             p.advance();
-            lhs = std::make_unique<Node>(NodeKind::NUMBER, NumberLiteral{value});
+            auto rhs = parse_term(p);
+            lhs      = std::make_unique<lang::Node>(NodeKind::BINOP,
+                                               BinOpNode{op, std::move(lhs), std::move(rhs)});
         }
-        else if (p.cur.kind == TokenKind::TIDENT &&
-                 (p.cur.name == "true" || p.cur.name == "false"))
-        {
-            bool value = p.cur.name == "true";
-            p.advance();
-            lhs = std::make_unique<Node>(NodeKind::BOOLEAN, BooleanLiteral{value});
-        }
-        else if (p.cur.kind == TokenKind::TIDENT)
-        {
-            std::string name = p.cur.name;
-            p.advance();
-            lhs = std::make_unique<Node>(NodeKind::IDENT, Identifier{name});
-        }
-        else if (p.cur.kind == TokenKind::TSTRING)
-        {
-            std::string value = p.cur.name;
-            p.advance();
-            lhs = std::make_unique<Node>(NodeKind::STRING, StringLiteral{value});
-        }
-        else
-        {
-            p.error_at(p.cur, std::format("Unexpected value token '{}'", token_kind_name(p.cur.kind)));
-            p.advance();
-            return nullptr;
-        }
-
-        while (true)
-        {
-            OpKind op;
-            if (p.cur.kind == TokenKind::TPLUS)
-                op = OpKind::ADD;
-            else if (p.cur.kind == TokenKind::TMINUS)
-                op = OpKind::SUB;
-            else if (p.cur.kind == TokenKind::TASTERIX)
-                op = OpKind::MULT;
-            else if (p.cur.kind == TokenKind::TSLASH)
-                op = OpKind::DIV;
-            else
-                break;
-
-            p.advance();
-
-            auto rhs = parse_value(p);
-            if (!rhs) return nullptr;
-            lhs = std::make_unique<Node>(NodeKind::BINOP,
-                                         BinOpNode{op, std::move(lhs), std::move(rhs)});
-            break;
-        }
-
         return lhs;
     }
 
@@ -613,6 +570,58 @@ namespace lang::lex
 
         return std::make_unique<Node>(NodeKind::LOADMODULE,
                                       LoadModuleNode{name});
+    }
+
+    std::unique_ptr<Node> parse_term(Parser& p)
+    {
+        auto lhs = parse_primary(p);
+        while (p.cur.kind == lang::lex::TokenKind::TASTERIX ||
+               p.cur.kind == lang::lex::TokenKind::TSLASH)
+        {
+            lang::OpKind op = (p.cur.kind == lang::lex::TokenKind::TASTERIX)
+                                  ? lang::OpKind::MULT
+                                  : lang::OpKind::DIV;
+            p.advance();
+            auto rhs = parse_primary(p);
+            lhs      = std::make_unique<lang::Node>(lang::NodeKind::BINOP,
+                                               lang::BinOpNode{op, std::move(lhs), std::move(rhs)});
+        }
+        return lhs;
+    }
+
+    std::unique_ptr<lang::Node> parse_primary(lang::lex::Parser& p)
+    {
+        if (p.cur.kind == lang::lex::TokenKind::TNUMBER)
+        {
+            std::size_t v = std::stoull(p.cur.name);
+            p.advance();
+            return std::make_unique<lang::Node>(lang::NodeKind::NUMBER,
+                                                lang::NumberLiteral{v});
+        }
+        if (p.cur.kind == lang::lex::TokenKind::TIDENT &&
+            (p.cur.name == "true" || p.cur.name == "false"))
+        {
+            bool v = p.cur.name == "true";
+            p.advance();
+            return std::make_unique<lang::Node>(lang::NodeKind::BOOLEAN,
+                                                lang::BooleanLiteral{v});
+        }
+        if (p.cur.kind == lang::lex::TokenKind::TSTRING)
+        {
+            auto v = p.cur.name;
+            p.advance();
+            return std::make_unique<lang::Node>(lang::NodeKind::STRING,
+                                                lang::StringLiteral{v});
+        }
+        if (p.cur.kind == lang::lex::TokenKind::TIDENT)
+        {
+            auto name = p.cur.name;
+            p.advance();
+            return std::make_unique<lang::Node>(lang::NodeKind::IDENT,
+                                                lang::Identifier{name});
+        }
+        p.error_at(p.cur, "Expected a value");
+        return nullptr;
     }
 
     std::unique_ptr<Node> parse_function(Parser& p)

@@ -1,80 +1,126 @@
-#include <iostream>
+#define LEXER_IMPLEMENTATION
+#include "frontend/lexer.h"
+#include "frontend/resolve.h"
+#include "frontend/printer.h"
+#include "middle/semantic.h"
+#include "middle/diagnostic.h"
+#include "backend/codegen.hpp"
+
 #include <fstream>
 #include <sstream>
+#include <iostream>
+#include <cstdlib>
 
-#include <vector>
-#define LEXER_IMPLEMENTATION
-#include "lexer.h"
-#include "printer.h"
-#include "resolve.h"
-#include "diagnostic.h"
-#include "semantic.h"
-
-std::string read_file(const std::string& path)
+static std::vector<std::unique_ptr<lang::Node>>
+parse_program(lang::lex::Parser& p)
 {
-    std::fstream fs(path);
-    if (!fs.is_open()) return "";
-    std::stringstream buf;
-    buf << fs.rdbuf();
-    return buf.str();
-}
+    std::vector<std::unique_ptr<lang::Node>> nodes;
 
-int main()
-{
-    lang::lex::Lexer  l{.src = read_file("src.jl"), .pos = 0};
-    lang::lex::Parser p;
-    p.lex = l;
-    p.advance();
-
-    std::vector<std::unique_ptr<lang::Node>> tree;
     while (p.cur.kind != lang::lex::TokenKind::TEOF)
     {
         if (p.cur.kind == lang::lex::TokenKind::THASH)
         {
-            auto node = parse_load_module(p);
-            if (node) tree.push_back(std::move(node));
+            auto n = lang::lex::parse_load_module(p);
+            if (n) nodes.push_back(std::move(n));
+            continue;
         }
-        else if (p.cur.kind == lang::lex::TokenKind::TIDENT && p.cur.name == "fn")
+
+        if (p.cur.kind == lang::lex::TokenKind::TIDENT && p.cur.name == "fn")
         {
-            auto node = parse_function(p);
-            if (node) tree.push_back(std::move(node));
+            auto n = lang::lex::parse_function(p);
+            if (n) nodes.push_back(std::move(n));
+            continue;
         }
-        else if (p.cur.kind == lang::lex::TokenKind::TIDENT && p.cur.name == "struct")
+
+        if (p.cur.kind == lang::lex::TokenKind::TIDENT && p.cur.name == "struct")
         {
-            auto node = parse_structure(p);
-            if (node) tree.push_back(std::move(node));
+            auto n = lang::lex::parse_structure(p);
+            if (n) nodes.push_back(std::move(n));
+            continue;
         }
-        else if (p.cur.kind == lang::lex::TokenKind::TIDENT && p.cur.name == "extern")
+
+        if (p.cur.kind == lang::lex::TokenKind::TIDENT && p.cur.name == "extern")
         {
-            auto node = parse_extern_lib(p);
-            if (node) tree.push_back(std::move(node));
+            auto n = lang::lex::parse_extern_lib(p);
+            if (n) nodes.push_back(std::move(n));
+            continue;
         }
-        else
-        {
-            p.error_at(p.cur, std::format("Unexpected top-level token '{}'", token_kind_name(p.cur.kind)));
-            p.advance();
-        }
+
+        p.error_at(p.cur, std::format("Unexpected top-level token '{}'", p.cur.name));
+        p.advance();
+    }
+
+    return nodes;
+}
+
+int main(int argc, char** argv)
+{
+    const char*   path = argc > 1 ? argv[1] : "src.jl";
+    std::ifstream file(path);
+    if (!file)
+    {
+        std::cerr << "Cannot open file: " << path << "\n";
+        return 1;
+    }
+    std::ostringstream ss;
+    ss << file.rdbuf();
+    std::string src = ss.str();
+
+    lang::lex::Lexer  lexer{src, 0};
+    auto              first_token = lang::lex::token_next(lexer);
+    lang::lex::Parser parser{lexer, first_token};
+    auto              nodes = parse_program(parser);
+
+    if (nodes.empty())
+    {
+        std::cerr << "Nothing parsed.\n";
+        return 1;
     }
 
     lang::Resolver resolver;
-    std::cout << "\n----Resolved AST PRINT ----\n";
-    for (auto& node : tree)
-    {
-        node = resolve_node(resolver, std::move(node));
-        if (node) print_node(*node);
-    }
+    for (auto& node : nodes)
+        node = lang::resolve_node(resolver, std::move(node));
 
     lang::DiagnosticEngine diag;
-    lang::Sema             sema{resolver, diag, {}};
-
-    std::cout << "\n---- Semanitc Pass ----\n";
-    for (auto& node : tree)
-    {
+    lang::Sema             sema{resolver, diag};
+    for (const auto& node : nodes)
         if (node) sema.check(*node);
+
+    diag.flush(src);
+    if (diag.has_errors)
+    {
+        std::cerr << "Aborting due to semantic errors.\n";
+        return 1;
     }
 
-    diag.flush(l.src);
-    if (diag.has_errors) return 1;
+#ifdef DUMP_AST
+    for (const auto& node : nodes)
+        if (node) lang::print_node(*node);
+#endif
 
+    lang::Codegen cg("src");
+
+    for (const auto& node : nodes)
+        if (node) cg.emit(*node);
+
+    // cg.dump();
+
+    std::string obj_path = "/tmp/out.o";
+    if (!cg.emit_object(obj_path))
+    {
+        std::cerr << "Code generation failed.\n";
+        return 1;
+    }
+
+    std::string out_path = argc > 2 ? argv[2] : "a.out";
+    std::string link_cmd = std::format("cc {} -o {} -lm", obj_path, out_path);
+    int         rc       = std::system(link_cmd.c_str());
+    if (rc != 0)
+    {
+        std::cerr << "Linking failed (cc returned " << rc << ")\n";
+        return 1;
+    }
+
+    std::cout << "Written: " << out_path << "\n";
     return 0;
 }

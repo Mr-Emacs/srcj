@@ -27,15 +27,15 @@ namespace lang
                 if constexpr (std::is_same_v<T, StringLiteral>)
                     return Type::string_();
 
-if constexpr (std::is_same_v<T, Identifier>)
-{
-    auto it = type_env.find(data.value);
-    if (it == type_env.end()) {
-        diag.error(std::format("Use of undeclared identifier '{}'", data.value));
-        return Type::unknown();
-    }
-    return it->second;
-}
+                if constexpr (std::is_same_v<T, Identifier>)
+                {
+                    auto it = type_env.find(data.value);
+                    if (it == type_env.end()) {
+                        diag.error(std::format("Use of undeclared identifier '{}'", data.value));
+                        return Type::unknown();
+                    }
+                    return it->second;
+                }
 
                 if constexpr (std::is_same_v<T, AssignNode>)
                 {
