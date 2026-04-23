@@ -35,6 +35,12 @@ namespace lang::lex
         TSQUOTE,
         TCOLONEQUAL,
         TSTRING,
+        THASH,
+        TASTERIX,
+        TCOMMA,
+        TPLUS,
+        TMINUS,
+        TSLASH,
         TCOUNT,
     };
 
@@ -72,7 +78,9 @@ namespace lang::lex
     std::unique_ptr<Node> parse_block(Parser& p);
     std::unique_ptr<Node> parse_statement(Parser& p);
     std::unique_ptr<Node> parse_value(Parser& p);
-
+    std::unique_ptr<Node> parse_load_module(Parser& p);
+    std::unique_ptr<Node> parse_extern_lib(Parser& p);
+    std::unique_ptr<Node> parse_structure(Parser& p);
 #if defined(LEXER_IMPLEMENTATION)
 
     char Lexer::peek()
@@ -101,11 +109,46 @@ namespace lang::lex
             return Token{.kind = TokenKind::TEOF, .pos = l.pos};
 
         char c = l.peek();
+        if (c == ',')
+        {
+            std::size_t p = l.pos;
+            l.advance();
+            return {.kind = TokenKind::TCOMMA, .pos = p};
+        }
+
+        if (c == '+')
+        {
+            std::size_t p = l.pos;
+            l.advance();
+            return {.kind = TokenKind::TPLUS, .pos = p};
+        }
+
+        if (c == '-')
+        {
+            std::size_t p = l.pos;
+            l.advance();
+            return {.kind = TokenKind::TMINUS, .pos = p};
+        }
+
+        if (c == '/')
+        {
+            std::size_t p = l.pos;
+            l.advance();
+            return {.kind = TokenKind::TSLASH, .pos = p};
+        }
+
         if (c == '=')
         {
             std::size_t p = l.pos;
             l.advance();
             return {.kind = TokenKind::TEQUAL, .pos = p};
+        }
+        // NOTE:*_for_Multiplication_20260420_020309
+        if (c == '*')
+        {
+            std::size_t p = l.pos;
+            l.advance();
+            return {.kind = TokenKind::TASTERIX, .pos = p};
         }
         if (c == '.')
         {
@@ -191,6 +234,12 @@ namespace lang::lex
             l.advance();
             return {.kind = TokenKind::TSQUOTE, .pos = p};
         }
+        if (c == '#')
+        {
+            std::size_t p = l.pos;
+            l.advance();
+            return {.kind = TokenKind::THASH, .pos = p};
+        }
         if (c == '"')
         {
             std::size_t start = l.pos;
@@ -247,7 +296,7 @@ namespace lang::lex
     constexpr std::string token_kind_name(TokenKind kind)
     {
         constexpr std::string_view names[] = {
-            "LPARENT", "RPARENT", "EQUAL", "NUMBER", "IDENT", "DOT", "NOT", "AMPRESAND", "BAR", "GREATER", "LESSER", "EOF", "UNKNOWN", "COLON", "RBRACE", "LBRACE", "RSBRACE", "LSBRACE", "SEMICOLON", "DQUOTE", "SQUOTE", "COLONEQUAL", "STRING"};
+            "LPARENT", "RPARENT", "EQUAL", "NUMBER", "IDENT", "DOT", "NOT", "AMPRESAND", "BAR", "GREATER", "LESSER", "EOF", "UNKNOWN", "COLON", "RBRACE", "LBRACE", "RSBRACE", "LSBRACE", "SEMICOLON", "DQUOTE", "SQUOTE", "COLONEQUAL", "STRING", "HASH", "ASTERIX", "EXTERN", "PLUS", "MINUS", "SLASH"};
         static_assert(std::size(names) == static_cast<std::size_t>(TokenKind::TCOUNT),
                       "token_kind_name is missing an entry — add it");
         auto i = static_cast<std::size_t>(kind);
@@ -303,35 +352,63 @@ namespace lang::lex
 
     std::unique_ptr<Node> parse_value(Parser& p)
     {
+        std::unique_ptr<Node> lhs;
         if (p.cur.kind == TokenKind::TNUMBER)
         {
             std::size_t value = std::stoull(p.cur.name);
             p.advance();
-            return std::make_unique<Node>(NodeKind::NUMBER, NumberLiteral{value});
+            lhs = std::make_unique<Node>(NodeKind::NUMBER, NumberLiteral{value});
         }
-        if (p.cur.kind == TokenKind::TIDENT &&
-            (p.cur.name == "true" || p.cur.name == "false"))
+        else if (p.cur.kind == TokenKind::TIDENT &&
+                 (p.cur.name == "true" || p.cur.name == "false"))
         {
             bool value = p.cur.name == "true";
             p.advance();
-            return std::make_unique<Node>(NodeKind::BOOLEAN, BooleanLiteral{value});
+            lhs = std::make_unique<Node>(NodeKind::BOOLEAN, BooleanLiteral{value});
         }
-        if (p.cur.kind == TokenKind::TIDENT)
+        else if (p.cur.kind == TokenKind::TIDENT)
         {
             std::string name = p.cur.name;
             p.advance();
-            return std::make_unique<Node>(NodeKind::IDENT, Identifier{name});
+            lhs = std::make_unique<Node>(NodeKind::IDENT, Identifier{name});
         }
-        if (p.cur.kind == TokenKind::TSTRING)
+        else if (p.cur.kind == TokenKind::TSTRING)
         {
             std::string value = p.cur.name;
             p.advance();
-            return std::make_unique<Node>(NodeKind::STRING, StringLiteral{value});
+            lhs = std::make_unique<Node>(NodeKind::STRING, StringLiteral{value});
+        }
+        else
+        {
+            p.error_at(p.cur, std::format("Unexpected value token '{}'", token_kind_name(p.cur.kind)));
+            p.advance();
+            return nullptr;
         }
 
-        p.error_at(p.cur, std::format("Unexpected value token '{}'", token_kind_name(p.cur.kind)));
-        p.advance();
-        return nullptr;
+        while (true)
+        {
+            OpKind op;
+            if (p.cur.kind == TokenKind::TPLUS)
+                op = OpKind::ADD;
+            else if (p.cur.kind == TokenKind::TMINUS)
+                op = OpKind::SUB;
+            else if (p.cur.kind == TokenKind::TASTERIX)
+                op = OpKind::MULT;
+            else if (p.cur.kind == TokenKind::TSLASH)
+                op = OpKind::DIV;
+            else
+                break;
+
+            p.advance();
+
+            auto rhs = parse_value(p);
+            if (!rhs) return nullptr;
+            lhs = std::make_unique<Node>(NodeKind::BINOP,
+                                         BinOpNode{op, std::move(lhs), std::move(rhs)});
+            break;
+        }
+
+        return lhs;
     }
 
     std::unique_ptr<Node> parse_statement(Parser& p)
@@ -431,8 +508,116 @@ namespace lang::lex
         return std::make_unique<Node>(NodeKind::BLOCK, std::move(block));
     }
 
+    std::unique_ptr<Node> parse_structure(Parser& p)
+    {
+        if (p.cur.kind != TokenKind::TIDENT || p.cur.name != "struct")
+        {
+            p.error_at(p.cur, "Expected keyword 'struct'.");
+            return nullptr;
+        }
+        p.advance();
+
+        if (!p.expect(TokenKind::TIDENT)) return nullptr;
+        auto name = p.cur.name;
+        p.advance();
+
+        if (!p.expect(TokenKind::TLBRACE)) return nullptr;
+        p.advance();
+
+        std::vector<FieldNode> fields;
+        while (p.cur.kind != TokenKind::TRBRACE && p.cur.kind != TokenKind::TEOF)
+        {
+            if (!p.expect(TokenKind::TIDENT)) return nullptr;
+            auto field_name = p.cur.name;
+            p.advance();
+
+            if (!p.expect(TokenKind::TCOLON)) return nullptr;
+            p.advance();
+
+            bool is_ptr = false;
+            if (p.cur.kind == TokenKind::TASTERIX)
+            {
+                is_ptr = true;
+                p.advance();
+            }
+
+            if (!p.expect(TokenKind::TIDENT)) return nullptr;
+            auto type = p.cur.name;
+            p.advance();
+
+            if (p.cur.kind == TokenKind::TSEMICOLON) p.advance();
+
+            fields.push_back({field_name, type, is_ptr});
+        }
+
+        if (!p.expect(TokenKind::TRBRACE)) return nullptr;
+        p.advance();
+
+        return std::make_unique<Node>(NodeKind::STRUCT, StructNode{name, std::move(fields)});
+    }
+
+    std::unique_ptr<Node> parse_extern_lib(Parser& p)
+    {
+        if (p.cur.kind != TokenKind::TIDENT || p.cur.name != "extern")
+        {
+            p.error_at(p.cur, "Expected Keyword 'extern'.");
+            return nullptr;
+        }
+        p.advance();
+
+        if (!p.expect(TokenKind::TSTRING)) return nullptr;
+        auto name = p.cur.name;
+        p.advance();
+
+        if (!p.expect(TokenKind::TCOMMA)) return nullptr;
+        p.advance();
+
+        if (p.cur.kind != TokenKind::TIDENT || p.cur.name != "path")
+        {
+            p.error_at(p.cur, "Expected Keyword 'path' after ','.");
+            return nullptr;
+        }
+        p.advance();
+        if (!p.expect(TokenKind::TEQUAL)) return nullptr;
+        p.advance();
+        if (!p.expect(TokenKind::TSTRING)) return nullptr;
+
+        auto path = p.cur.name;
+        p.advance();
+
+        if (p.cur.kind == TokenKind::TSEMICOLON) p.advance();
+        return std::make_unique<Node>(NodeKind::EXTERN,
+                                      ExternNode{name, path});
+    }
+
+    std::unique_ptr<Node> parse_load_module(Parser& p)
+    {
+        if (p.cur.kind != TokenKind::THASH)
+        {
+            p.error_at(p.cur, "Expected Character '#'.");
+            return nullptr;
+        }
+        p.advance();
+        if (p.cur.kind != TokenKind::TIDENT || p.cur.name != "load")
+        {
+            p.error_at(p.cur, "Expected Keyword 'load' after '#'.");
+            return nullptr;
+        }
+        p.advance();
+
+        if (!p.expect(TokenKind::TSTRING)) return nullptr;
+        auto name = p.cur.name;
+        p.advance();
+
+        if (p.cur.kind == TokenKind::TSEMICOLON) p.advance();
+
+        return std::make_unique<Node>(NodeKind::LOADMODULE,
+                                      LoadModuleNode{name});
+    }
+
     std::unique_ptr<Node> parse_function(Parser& p)
     {
+
         if (p.cur.kind != TokenKind::TIDENT || p.cur.name != "fn")
         {
             p.error_at(p.cur, "Expected keyword 'fn'.");

@@ -24,6 +24,10 @@ namespace lang
             } else if constexpr (std::is_same_v<T, AssignNode>) {
                 std::cout << indent << "Assign(" << data.name << ")\n";
                 if (data.value) print_node(*data.value, depth + 1);
+            } else if constexpr (std::is_same_v<T, LoadModuleNode>) {
+                std::cout << indent << "LoadModule(" << data.name << ")\n";
+            } else if constexpr (std::is_same_v<T, ExternNode>) {
+                std::cout << indent << "Extern(" << data.name << "," << data.path << ")\n";
             } else if constexpr (std::is_same_v<T, BinOpNode>) {
                 constexpr std::string_view ops[] = {"ADD", "SUB", "MULT", "DIV"};
                 std::cout << indent << "BinOp(" << ops[static_cast<int>(data.kind)] << ")\n";
@@ -36,7 +40,14 @@ namespace lang
             } else if constexpr (std::is_same_v<T, FunctionDeclNode>) {
                 std::cout << indent << "FunctionDecl(" << data.name << ")\n";
                 if (data.body) print_node(*data.body, depth + 1);
-            } else if constexpr (std::is_same_v<T, IntrinsicCallNode>) {
+            }
+            else if constexpr (std::is_same_v<T, StructNode>) {
+                std::cout << indent << "Struct(" << data.name << ")\n";
+                for (const auto& f : data.fields)
+                std::cout << indent << "  Field(" << f.name << ": "
+                << (f.is_pointer ? "*" : "") << f.type_name << ")\n";
+            }
+            else if constexpr (std::is_same_v<T, IntrinsicCallNode>) {
                 constexpr std::string_view names[] = {"print", "add", "sub"};
                 auto                       i       = static_cast<std::size_t>(data.kind);
                 std::cout << indent << "IntrinsicCall(" << names[i] << ")\n";

@@ -11,14 +11,17 @@ namespace lang
     {
         Variable,
         Function,
+        Module,
+        Struct,
         Intrinsic,
     };
 
     // TODO: Add type info
     struct Symbol
     {
-        std::string name;
         SymbolKind  kind;
+        std::string name;
+        std::string module_name;
         Type        type = Type::unknown();
         Intrinsic   intrinsic;
     };
@@ -73,20 +76,52 @@ namespace lang
         {
             current->define(std::move(sym));
         }
+        void load_module(const std::string& module_name)
+        {
+            current->define({
+                .kind        = SymbolKind::Module,
+                .name        = module_name,
+                .module_name = module_name,
+            });
+        }
 
       private:
         void register_intrinsics()
         {
-            current->define({.name = "print", .kind = SymbolKind::Intrinsic, .type = Type::void_(), .intrinsic = {"print", IntrinsicKind::PRINT}});
-            current->define({.name = "add", .kind = SymbolKind::Intrinsic, .type = Type::number_(), .intrinsic = {"add", IntrinsicKind::ADD}});
             current->define({
-                .name      = "sub",
                 .kind      = SymbolKind::Intrinsic,
+                .name      = "print",
+                .type      = Type::void_(),
+                .intrinsic = {"print", IntrinsicKind::PRINT},
+            });
+            current->define({
+                .kind      = SymbolKind::Intrinsic,
+                .name      = "add",
+                .type      = Type::number_(),
+                .intrinsic = {"add", IntrinsicKind::ADD},
+            });
+            current->define({
+                .kind      = SymbolKind::Intrinsic,
+                .name      = "sub",
                 .type      = Type::number_(),
                 .intrinsic = {"sub", IntrinsicKind::SUB},
             });
 
-            static_assert(static_cast<uint8_t>(IntrinsicKind::COUNT) == 3,
+            current->define({
+                .kind      = SymbolKind::Intrinsic,
+                .name      = "mult",
+                .type      = Type::number_(),
+                .intrinsic = {"mult", IntrinsicKind::MULT},
+            });
+
+            current->define({
+                .kind      = SymbolKind::Intrinsic,
+                .name      = "div",
+                .type      = Type::number_(),
+                .intrinsic = {"div", IntrinsicKind::DIV},
+            });
+
+            static_assert(static_cast<uint8_t>(IntrinsicKind::COUNT) == 5,
                           "register_intrinsics is missing an entry for a new IntrinsicKind");
         }
     };

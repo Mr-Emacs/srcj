@@ -33,15 +33,26 @@ namespace lang
         else if (node->kind == NodeKind::FUNCTIONDECL)
         {
             auto& decl = std::get<FunctionDeclNode>(node->data);
-            r.define({decl.name, SymbolKind::Function, {}, {}});
+            r.define({SymbolKind::Function, decl.name, {}, {}});
             decl.body = resolve_node(r, std::move(decl.body));
+        }
+
+        else if (node->kind == NodeKind::LOADMODULE)
+        {
+            auto& load = std::get<LoadModuleNode>(node->data);
+            r.load_module(load.name);
+        }
+        else if (node->kind == NodeKind::STRUCT)
+        {
+            auto& s = std::get<StructNode>(node->data);
+            r.define({SymbolKind::Struct, s.name, {}, {}});
         }
 
         if (node->kind == NodeKind::ASSIGN)
         {
             auto& assign = std::get<AssignNode>(node->data);
             assign.value = resolve_node(r, std::move(assign.value));
-            r.define({assign.name, SymbolKind::Variable, {}, {}});
+            r.define({SymbolKind::Variable, assign.name, {}, {}});
         }
 
         return node;

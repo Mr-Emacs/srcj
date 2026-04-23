@@ -29,9 +29,24 @@ int main()
     std::vector<std::unique_ptr<lang::Node>> tree;
     while (p.cur.kind != lang::lex::TokenKind::TEOF)
     {
-        if (p.cur.kind == lang::lex::TokenKind::TIDENT && p.cur.name == "fn")
+        if (p.cur.kind == lang::lex::TokenKind::THASH)
+        {
+            auto node = parse_load_module(p);
+            if (node) tree.push_back(std::move(node));
+        }
+        else if (p.cur.kind == lang::lex::TokenKind::TIDENT && p.cur.name == "fn")
         {
             auto node = parse_function(p);
+            if (node) tree.push_back(std::move(node));
+        }
+        else if (p.cur.kind == lang::lex::TokenKind::TIDENT && p.cur.name == "struct")
+        {
+            auto node = parse_structure(p);
+            if (node) tree.push_back(std::move(node));
+        }
+        else if (p.cur.kind == lang::lex::TokenKind::TIDENT && p.cur.name == "extern")
+        {
+            auto node = parse_extern_lib(p);
             if (node) tree.push_back(std::move(node));
         }
         else

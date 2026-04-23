@@ -2,3 +2,4 @@ main.exe
 jit-cc.exe
 main
 build/
+vendor/

@@ -13,7 +13,7 @@
 ;; Keywords
 (defconst jl-keywords
   '("fn" "if" "else" "while" "return" "true" "false"
-    "struct" "open" "extern" "interface" "import" "module" "load" "as"
+    "struct" "open" "extern" "path" "interface" "import" "module" "load" "as"
     "comptime"))
 
 ;; Intrinsic directives (#import, #load)
@@ -33,7 +33,7 @@
    `("extern\\s-+\"\\([^\"]+\\)\"" (1 font-lock-string-face))
 
    ;; Keywords
-   `(,(regexp-opt jl-keywords 'symbols) . font-lock-keyword-face)
+   `(,(regexp-opt jl-keywords 'symbols) (0 font-lock-keyword-face t))
 
    ;; Types
    `(,(regexp-opt jl-types 'symbols) . font-lock-type-face)
@@ -45,7 +45,7 @@
    `("\\bmodule\\s-+\\([A-Z][a-zA-Z0-9_]*\\)" (1 font-lock-type-face))
 
    ;; Struct names: struct Foo
-   `("\\bstruct\\s-+\\([A-Z][a-zA-Z0-9_]*\\)" (1 font-lock-type-face))
+   `("\\bstruct\\s-+\\([a-zA-Z][a-zA-Z0-9_]*\\)" (1 font-lock-type-face))
 
    ;; Interface names: interface Foo
    `("\\binterface\\s-+\\([A-Z][a-zA-Z0-9_]*\\)" (1 font-lock-type-face))

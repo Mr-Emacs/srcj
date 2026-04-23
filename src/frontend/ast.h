@@ -62,10 +62,34 @@ namespace lang
         std::vector<std::unique_ptr<Node>> args;
     };
 
+    struct FieldNode
+    {
+        std::string name;
+        std::string type_name;
+        bool        is_pointer = false;
+    };
+
     struct IntrinsicCallNode
     {
         IntrinsicKind                      kind;
         std::vector<std::unique_ptr<Node>> args;
+    };
+
+    struct LoadModuleNode
+    {
+        std::string name;
+    };
+
+    struct StructNode
+    {
+        std::string            name;
+        std::vector<FieldNode> fields;
+    };
+
+    struct ExternNode
+    {
+        std::string name;
+        std::string path;
     };
 
     using NodeData = std::variant<
@@ -78,6 +102,9 @@ namespace lang
         BlockNode,
         FunctionDeclNode,
         FunctionCallNode,
+        LoadModuleNode,
+        StructNode,
+        ExternNode,
         IntrinsicCallNode>;
 
     struct Node

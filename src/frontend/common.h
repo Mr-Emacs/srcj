@@ -16,6 +16,9 @@ namespace lang
         IDENT,
         BLOCK,
         INTRINSICCALL,
+        LOADMODULE,
+        STRUCT,
+        EXTERN,
         COUNT,
     };
 
@@ -24,6 +27,8 @@ namespace lang
         PRINT,
         ADD,
         SUB,
+        MULT,
+        DIV,
         COUNT,
     };
 
