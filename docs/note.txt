@@ -48,3 +48,31 @@ if i > str.len() && i  > 0 {
 }
 
 # Break and Continue
+
+Binding generators are going to be in the Compiler module and it will include some intrinsic call so we can construct functions from them
+
+```notes
+#import "Compiler" as *;
+
+comptime {
+    struct Lib {
+        file_path : string,
+        dir_path : string,
+    }
+
+    generate_binding("raylib.h", "./libraylib.so", "raylib");
+    inputs := Array<string>.init();
+
+    inputs.push("src1.jl");
+    inputs.push("src2.jl");
+    inputs.push("src3.jl");
+
+    libs := Array<Lib>.init();
+
+    libs.push($ { file_path = "./libraylib.so" });
+    libs.push($ { file_path = "./libraylib.a",  dir_path = "raylib" });
+    
+
+    build_exe(inputs, .output_name = "main", .libs = libs);
+}
+```
